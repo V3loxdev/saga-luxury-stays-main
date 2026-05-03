@@ -1,0 +1,236 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 20% 98%;
+    --foreground: 40 10% 10%;
+
+    --card: 40 20% 97%;
+    --card-foreground: 40 10% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 40 10% 10%;
+
+    --primary: 40 60% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 40 15% 92%;
+    --secondary-foreground: 40 10% 15%;
+
+    --muted: 40 10% 94%;
+    --muted-foreground: 40 5% 45%;
+
+    --accent: 40 60% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 40 60% 50%;
+
+    --radius: 0.75rem;
+
+    --gold: 40 60% 50%;
+    --gold-light: 40 50% 70%;
+    --gold-dark: 40 70% 35%;
+    --dark: 40 10% 8%;
+    --dark-card: 40 8% 12%;
+    --dark-border: 40 8% 20%;
+
+    --sidebar-background: 40 10% 8%;
+    --sidebar-foreground: 40 10% 85%;
+    --sidebar-primary: 40 60% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 40 8% 16%;
+    --sidebar-accent-foreground: 40 10% 90%;
+    --sidebar-border: 40 8% 20%;
+    --sidebar-ring: 40 60% 50%;
+
+    --font-display: 'Playfair Display', serif;
+    --font-body: 'Inter', sans-serif;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .card-3d {
+    @apply rounded-xl transition-all duration-500 ease-out;
+    box-shadow: 0 4px 20px -4px hsl(40 10% 10% / 0.08), 0 2px 8px -2px hsl(40 10% 10% / 0.06);
+  }
+  .card-3d:hover {
+    transform: translateY(-8px) scale(1.01);
+    box-shadow: 0 20px 40px -8px hsl(40 10% 10% / 0.15), 0 8px 16px -4px hsl(40 10% 10% / 0.1);
+  }
+
+  .btn-gold {
+    @apply px-6 py-3 rounded-lg font-medium text-sm tracking-wide transition-all duration-300;
+    background: linear-gradient(135deg, hsl(var(--gold)) 0%, hsl(var(--gold-dark)) 100%);
+    color: white;
+    box-shadow: 0 4px 12px hsl(var(--gold) / 0.3);
+  }
+  .btn-gold:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px hsl(var(--gold) / 0.4);
+  }
+  .btn-gold:active {
+    transform: scale(0.97);
+  }
+
+  .btn-outline-gold {
+    @apply px-6 py-3 rounded-lg font-medium text-sm tracking-wide transition-all duration-300 border-2;
+    border-color: hsl(var(--gold));
+    color: hsl(var(--gold));
+  }
+  .btn-outline-gold:hover {
+    background: hsl(var(--gold));
+    color: white;
+    transform: translateY(-2px);
+  }
+  .btn-outline-gold:active {
+    transform: scale(0.97);
+  }
+
+  .gold-text {
+    background: linear-gradient(135deg, hsl(var(--gold-light)) 0%, hsl(var(--gold)) 50%, hsl(var(--gold-dark)) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .section-dark {
+    background: hsl(var(--dark));
+    color: hsl(40 10% 90%);
+  }
+
+  .badge-limited {
+    @apply px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest;
+    background: linear-gradient(135deg, hsl(0 72% 51%) 0%, hsl(0 72% 40%) 100%);
+    color: white;
+    animation: pulse-badge 2s ease-in-out infinite;
+  }
+
+  .admin-card {
+    @apply rounded-xl p-6 transition-all duration-300;
+    background: hsl(var(--dark-card));
+    border: 1px solid hsl(var(--dark-border));
+  }
+  .admin-card:hover {
+    border-color: hsl(var(--gold) / 0.3);
+    box-shadow: 0 0 20px hsl(var(--gold) / 0.08);
+  }
+
+  .scroll-reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    filter: blur(4px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                filter 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .scroll-reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+
+  .scroll-reveal-left {
+    opacity: 0;
+    transform: translateX(-30px);
+    filter: blur(4px);
+    transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+                filter 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .scroll-reveal-left.visible {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+
+  .scroll-reveal-right {
+    opacity: 0;
+    transform: translateX(30px);
+    filter: blur(4px);
+    transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+                filter 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .scroll-reveal-right.visible {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+
+  .scroll-reveal-scale {
+    opacity: 0;
+    transform: scale(0.9);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .scroll-reveal-scale.visible {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .gold-shimmer {
+    background: linear-gradient(
+      110deg,
+      hsl(var(--gold-dark)) 0%,
+      hsl(var(--gold-light)) 40%,
+      hsl(var(--gold)) 50%,
+      hsl(var(--gold-light)) 60%,
+      hsl(var(--gold-dark)) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer 3s ease-in-out infinite;
+  }
+
+  .parallax-slow {
+    will-change: transform;
+    transition: transform 0.1s linear;
+  }
+
+  .magnetic-hover {
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .magnetic-hover:hover {
+    transform: translateY(-4px) scale(1.02);
+  }
+  .magnetic-hover:active {
+    transform: scale(0.97);
+  }
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
