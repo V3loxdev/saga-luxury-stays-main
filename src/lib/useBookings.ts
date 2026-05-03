@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-
+import { bookingsRef, push, update, onValue, off, isConfigured } from './firebase';
 
 export type StayType = '3hrs' | '12hrs' | '1day';
 
@@ -69,17 +68,60 @@ export const getBookingTimer = (booking: Booking): { remaining: number; formatte
 export const useBookings = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [tick, setTick] = useState(0);
+  const [isInitialized, setIsInitialized] = useState(false);
 
+  // Load from localStorage on mount for offline support
   useEffect(() => {
     const saved = localStorage.getItem('saga-bookings');
     if (saved) {
-      setBookings(JSON.parse(saved));
+      try {
+        setBookings(JSON.parse(saved));
+      } catch {
+        console.error('Failed to load bookings from localStorage');
+      }
     }
   }, []);
 
+  // Sync with Firebase and listen for real-time updates
   useEffect(() => {
-    localStorage.setItem('saga-bookings', JSON.stringify(bookings));
-  }, [bookings]);
+    if (!isConfigured) {
+      console.warn('Firebase not configured. Using localStorage only.');
+      setIsInitialized(true);
+      return;
+    }
+
+    let unsubscribe: (() => void) | null = null;
+
+    const setupFirebaseListener = async () => {
+      try {
+        // Listen to Firebase changes
+        unsubscribe = onValue(bookingsRef, (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            const bookingsList = Object.entries(data).map(([, value]: [string, any]) => value);
+            setBookings(bookingsList);
+            // Save to localStorage as backup
+            localStorage.setItem('saga-bookings', JSON.stringify(bookingsList));
+          } else {
+            setBookings([]);
+            localStorage.setItem('saga-bookings', JSON.stringify([]));
+          }
+          setIsInitialized(true);
+        });
+      } catch (error) {
+        console.warn('Firebase listener setup failed:', error);
+        setIsInitialized(true);
+      }
+    };
+
+    setupFirebaseListener();
+
+    return () => {
+      if (unsubscribe) {
+        off(bookingsRef);
+      }
+    };
+  }, []);
 
   // Live tick every second for countdown refreshes
   useEffect(() => {
@@ -96,31 +138,99 @@ export const useBookings = () => {
       status: 'Pending' as const,
       timestamp: Date.now(),
     };
-    setBookings(prev => [...prev, newBooking]);
+
+    if (isConfigured) {
+      try {
+        push(bookingsRef, newBooking);
+      } catch (error) {
+        console.warn('Firebase write failed, saving to localStorage:', error);
+        setBookings(prev => [...prev, newBooking]);
+        localStorage.setItem('saga-bookings', JSON.stringify([...bookings, newBooking]));
+      }
+    } else {
+      // Fallback: update locally
+      setBookings(prev => [...prev, newBooking]);
+      localStorage.setItem('saga-bookings', JSON.stringify([...bookings, newBooking]));
+    }
   };
 
   const deleteBooking = (id: string) => {
-    setBookings(prev => prev.filter(b => b.id !== id));
+    if (isConfigured) {
+      try {
+        const updateObj: Record<string, null> = {};
+        updateObj[id] = null;
+        update(bookingsRef, updateObj);
+      } catch (error) {
+        console.warn('Firebase delete failed, deleting from localStorage:', error);
+        setBookings(prev => prev.filter(b => b.id !== id));
+        localStorage.setItem('saga-bookings', JSON.stringify(bookings.filter(b => b.id !== id)));
+      }
+    } else {
+      setBookings(prev => prev.filter(b => b.id !== id));
+      localStorage.setItem('saga-bookings', JSON.stringify(bookings.filter(b => b.id !== id)));
+    }
   };
 
   const updateStatus = (id: string, status: Booking['status'], assignedRoom?: string) => {
-    setBookings(prev => prev.map(b => {
-      if (b.id !== id) return b;
-      const updates: Partial<Booking> = { status };
-      if (status === 'Confirmed' && !b.confirmedAt) {
-        updates.confirmedAt = Date.now();
+    if (isConfigured) {
+      try {
+        const updateObj: Record<string, any> = {};
+        updateObj[`${id}/status`] = status;
+        if (status === 'Confirmed') {
+          updateObj[`${id}/confirmedAt`] = Date.now();
+        }
+        if (assignedRoom) {
+          updateObj[`${id}/assignedRoom`] = assignedRoom;
+        }
+        update(bookingsRef, updateObj);
+      } catch (error) {
+        console.warn('Firebase update failed, updating localStorage:', error);
+        setBookings(prev => prev.map(b => {
+          if (b.id !== id) return b;
+          const updates: Partial<Booking> = { status };
+          if (status === 'Confirmed' && !b.confirmedAt) {
+            updates.confirmedAt = Date.now();
+          }
+          if (assignedRoom) {
+            updates.assignedRoom = assignedRoom;
+          }
+          return { ...b, ...updates };
+        }));
+        localStorage.setItem('saga-bookings', JSON.stringify(bookings));
       }
-      if (assignedRoom) {
-        updates.assignedRoom = assignedRoom;
-      }
-      return { ...b, ...updates };
-    }));
+    } else {
+      setBookings(prev => prev.map(b => {
+        if (b.id !== id) return b;
+        const updates: Partial<Booking> = { status };
+        if (status === 'Confirmed' && !b.confirmedAt) {
+          updates.confirmedAt = Date.now();
+        }
+        if (assignedRoom) {
+          updates.assignedRoom = assignedRoom;
+        }
+        return { ...b, ...updates };
+      }));
+      localStorage.setItem('saga-bookings', JSON.stringify(bookings));
+    }
   };
 
   const expireBooking = (id: string) => {
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'Expired' as const } : b));
+    if (isConfigured) {
+      try {
+        const updateObj: Record<string, any> = {};
+        updateObj[`${id}/status`] = 'Expired';
+        update(bookingsRef, updateObj);
+      } catch (error) {
+        console.warn('Firebase expire failed, updating localStorage:', error);
+        setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'Expired' as const } : b));
+        localStorage.setItem('saga-bookings', JSON.stringify(bookings));
+      }
+    } else {
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'Expired' as const } : b));
+      localStorage.setItem('saga-bookings', JSON.stringify(bookings));
+    }
   };
 
-  return { bookings, tick, addBooking, deleteBooking, updateStatus, expireBooking };
+  return { bookings, tick, addBooking, deleteBooking, updateStatus, expireBooking, isInitialized };
 };
 
