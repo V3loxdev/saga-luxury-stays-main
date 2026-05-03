@@ -35,7 +35,7 @@ export default function AdminRooms() {
   const occupied = rooms.filter((room) => room.status === "Occupied").length;
   const totalRooms = rooms.length;
 
-  const addRoom = () => {
+  const handleLocalAddRoom = () => {
     if (!newRoom.name.trim()) return;
 
     const newR = {
@@ -86,7 +86,7 @@ export default function AdminRooms() {
     setEditingRoom("");
   };
 
-  const deleteRoom = (name: string) => {
+  const handleDeleteRoom = (name: string) => {
     if (!confirm("Delete this room?")) return;
     deleteRoom(name);
   };
@@ -269,7 +269,7 @@ export default function AdminRooms() {
               Cancel
             </button>
             <button
-              onClick={addRoom}
+              onClick={handleLocalAddRoom}
               disabled={!newRoom.name.trim()}
               className="rounded-3xl bg-gold px-6 py-3 text-sm font-semibold text-dark transition hover:-translate-y-0.5 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -358,7 +358,7 @@ export default function AdminRooms() {
                               <Edit3 size={20} />
                             </button>
                             <button
-                              onClick={() => deleteRoom(room.name)}
+                              onClick={() => handleDeleteRoom(room.name)}
                               className="group relative p-3 rounded-2xl bg-red-500/10 hover:bg-red-500/20 border-2 border-red-500/30 text-red-400 hover:text-red-400 transition-all duration-300 shadow-md hover:shadow-lg hover:scale-[1.05] hover:-translate-y-0.5 active:scale-[0.98]"
                               title="Delete Room"
                             >
