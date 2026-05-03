@@ -21,38 +21,30 @@ type RoomForm = {
 };
 
 export default function AdminRooms() {
-  const { rooms, tick, occupyRoomWithTimer, vacateRoom } = useRooms();
+  const { rooms, tick, addRoom, updateRoom, deleteRoom, occupyRoomWithTimer, vacateRoom } = useRooms();
   const [showForm, setShowForm] = useState(false);
   const [newRoom, setNewRoom] = useState<RoomForm>({ name: "", type: "Regular", floor: "1st" });
   const [editingRoom, setEditingRoom] = useState<string>("");
   const [editForm, setEditForm] = useState<RoomForm>({ name: "", type: "Regular", floor: "1st" });
-  const [localRooms, setLocalRooms] = useState<Room[]>(rooms);
 
   // Duration selection dialog state
   const [occupyingRoom, setOccupyingRoom] = useState<string | null>(null);
   const [selectedDuration, setSelectedDuration] = useState<number>(ROOM_DURATION_OPTIONS[0].value);
 
-  useEffect(() => {
-    setLocalRooms(rooms);
-  }, [rooms]);
-
-  const available = localRooms.filter((room) => room.status === "Available").length;
-  const occupied = localRooms.filter((room) => room.status === "Occupied").length;
-  const totalRooms = localRooms.length;
+  const available = rooms.filter((room) => room.status === "Available").length;
+  const occupied = rooms.filter((room) => room.status === "Occupied").length;
+  const totalRooms = rooms.length;
 
   const addRoom = () => {
     if (!newRoom.name.trim()) return;
 
-    const newR: Room = {
+    const newR = {
       name: newRoom.name.trim(),
       type: newRoom.type,
       floor: newRoom.floor,
-      status: "Available",
     };
 
-    const updated = [...localRooms, newR];
-    setLocalRooms(updated);
-    localStorage.setItem("saga-rooms", JSON.stringify(updated));
+    addRoom(newR);
     setNewRoom({ name: "", type: "Regular", floor: "1st" });
     setShowForm(false);
   };
@@ -86,23 +78,17 @@ export default function AdminRooms() {
   const saveEdit = () => {
     if (!editForm.name.trim()) return;
 
-    const updated = localRooms.map((room) =>
-      room.name === editingRoom
-        ? { ...room, name: editForm.name.trim(), type: editForm.type, floor: editForm.floor }
-        : room
-    );
-
-    setLocalRooms(updated);
-    localStorage.setItem("saga-rooms", JSON.stringify(updated));
+    updateRoom(editingRoom, {
+      name: editForm.name.trim(),
+      type: editForm.type,
+      floor: editForm.floor
+    });
     setEditingRoom("");
   };
 
   const deleteRoom = (name: string) => {
     if (!confirm("Delete this room?")) return;
-
-    const updated = localRooms.filter((room) => room.name !== name);
-    setLocalRooms(updated);
-    localStorage.setItem("saga-rooms", JSON.stringify(updated));
+    deleteRoom(name);
   };
 
   const getRoomTimerDisplay = (room: Room) => {
@@ -301,7 +287,7 @@ export default function AdminRooms() {
               <p className="text-sm text-muted-foreground">Manage room status and properties in one place.</p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-gold/20 bg-gold/10 px-4 py-2 text-sm text-gold">
-              <span className="font-medium">{localRooms.length}</span>
+              <span className="font-medium">{totalRooms}</span>
               rooms
             </div>
           </div>
@@ -317,7 +303,7 @@ export default function AdminRooms() {
                 </tr>
               </thead>
               <tbody>
-                {localRooms.length === 0 ? (
+                {rooms.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-20 text-center text-muted-foreground">
                       <Bed className="w-16 h-16 mx-auto mb-4 opacity-50" />
@@ -326,7 +312,7 @@ export default function AdminRooms() {
                     </td>
                   </tr>
                 ) : (
-                  localRooms.map((room) => {
+                  rooms.map((room) => {
                     const timerDisplay = getRoomTimerDisplay(room);
                     return (
                       <tr key={room.name} className="border-b border-dark-border/20 hover:bg-gold/5 transition-all duration-200">

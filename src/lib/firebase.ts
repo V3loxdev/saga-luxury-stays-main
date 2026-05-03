@@ -24,18 +24,22 @@ const isConfigured = !firebaseConfig.apiKey.includes('YOUR_');
 let app: any;
 let database: any;
 let bookingsRef: any;
+let roomsRef: any;
+let snacksDrinksRef: any;
 
 if (isConfigured) {
   try {
     app = initializeApp(firebaseConfig);
     database = getDatabase(app);
     bookingsRef = ref(database, 'bookings');
+    roomsRef = ref(database, 'rooms');
+    snacksDrinksRef = ref(database, 'snacksDrinks');
   } catch (error) {
     console.error('Firebase initialization error:', error);
   }
 }
 
 export { push, update, onValue, off };
-export { database, bookingsRef };
+export { database, bookingsRef, roomsRef, snacksDrinksRef };
 export { isConfigured };
 

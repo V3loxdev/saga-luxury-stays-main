@@ -1,12 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import { roomsRef, push, update, onValue, off, isConfigured } from './firebase';
+import type { Room } from './rooms';
 
-export interface Room {
-  name: string;
-  type: 'Regular' | 'Premium';
-  status: 'Available' | 'Occupied';
-  floor: string;
-  occupiedAt?: number;
-  durationMs?: number;
+export interface RoomData extends Room {
+  id?: string;
 }
 
 export const ROOM_DURATION_OPTIONS = [
@@ -15,7 +12,7 @@ export const ROOM_DURATION_OPTIONS = [
   { label: '24 Hours', value: 24 * 60 * 60 * 1000 },
 ];
 
-export const getRoomRemainingTime = (room: Room): number => {
+export const getRoomRemainingTime = (room: RoomData): number => {
   if (!room.occupiedAt || !room.durationMs) return 0;
   const endTime = room.occupiedAt + room.durationMs;
   return Math.max(0, endTime - Date.now());
@@ -30,82 +27,160 @@ export const formatRoomTime = (ms: number): string => {
 };
 
 export const useRooms = () => {
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<RoomData[]>([]);
   const [tick, setTick] = useState(0);
+  const [isInitialized, setIsInitialized] = useState(false);
 
+  // Load from localStorage first for instant UI
   useEffect(() => {
     const saved = localStorage.getItem('saga-rooms');
     if (saved) {
-      setRooms(JSON.parse(saved));
-    } else {
-      const defaultRooms: Room[] = [
-        { name: "Regular Room 101", type: "Regular", status: "Available" as const, floor: "1st" },
-        { name: "Regular Room 102", type: "Regular", status: "Available" as const, floor: "1st" },
-        { name: "Regular Room 103", type: "Regular", status: "Available" as const, floor: "1st" },
-        { name: "Regular Room 201", type: "Regular", status: "Available" as const, floor: "2nd" },
-        { name: "Regular Room 202", type: "Regular", status: "Available" as const, floor: "2nd" },
-        { name: "Premium Suite 301", type: "Premium", status: "Available" as const, floor: "3rd" },
-        { name: "Premium Suite 302", type: "Premium", status: "Available" as const, floor: "3rd" },
-        { name: "Premium Suite 303", type: "Premium", status: "Available" as const, floor: "3rd" },
-        { name: "Premium Suite 304", type: "Premium", status: "Available" as const, floor: "3rd" },
-        { name: "Premium Suite 305", type: "Premium", status: "Available" as const, floor: "3rd" },
-      ];
-      setRooms(defaultRooms);
-      localStorage.setItem('saga-rooms', JSON.stringify(defaultRooms));
+      try {
+        setRooms(JSON.parse(saved));
+      } catch {
+        console.error('Failed to load rooms from localStorage');
+      }
     }
   }, []);
 
+  // Firebase sync effect (mirrors useBookings pattern)
   useEffect(() => {
-    localStorage.setItem('saga-rooms', JSON.stringify(rooms));
-  }, [rooms]);
+    if (!isConfigured) {
+      console.warn('Firebase not configured for rooms. Using localStorage only.');
+      setIsInitialized(true);
+      return;
+    }
 
-  // Live tick every second for countdown refreshes
+    let unsubscribe: (() => void) | null = null;
+
+    const setupListener = () => {
+      try {
+        unsubscribe = onValue(roomsRef, (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            const roomsList = Object.entries(data).map(([id, value]: [string, any]) => ({ id, ...value }));
+            setRooms(roomsList);
+            localStorage.setItem('saga-rooms', JSON.stringify(roomsList));
+          } else {
+            setRooms([]);
+            localStorage.setItem('saga-rooms', JSON.stringify([]));
+          }
+          setIsInitialized(true);
+        });
+      } catch (error) {
+        console.warn('Firebase rooms listener failed:', error);
+        setIsInitialized(true);
+      }
+    };
+
+    setupListener();
+
+    return () => {
+      if (unsubscribe) off(roomsRef, 'value', unsubscribe);
+    };
+  }, []);
+
+  // Live tick for timers
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTick(t => t + 1);
-    }, 1000);
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-expire rooms when their timer reaches 0
+  // Auto-vacate expired rooms
   useEffect(() => {
     rooms.forEach(room => {
       if (room.status === 'Occupied' && room.occupiedAt && room.durationMs) {
         const remaining = getRoomRemainingTime(room);
         if (remaining <= 0) {
-          vacateRoom(room.name);
+          vacateRoom(room.name || room.id);
         }
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick]);
+  }, [tick, rooms]);
 
-  const occupyRoom = (roomName: string, roomType: string) => {
-    setRooms(prev => prev.map(r => 
-      r.name === roomName ? { ...r, status: 'Occupied' as const } : r
-    ));
+  const addRoom = (roomData: Omit<RoomData, 'status'>) => {
+    const newRoom = {
+      ...roomData,
+      status: 'Available' as const,
+    };
+
+    if (isConfigured) {
+      try {
+        push(roomsRef, newRoom);
+      } catch (error) {
+        console.warn('Firebase addRoom failed:', error);
+        // Fallback local
+        setRooms(prev => [...prev, newRoom]);
+        localStorage.setItem('saga-rooms', JSON.stringify([...rooms, newRoom]));
+      }
+    } else {
+      setRooms(prev => [...prev, newRoom]);
+      localStorage.setItem('saga-rooms', JSON.stringify([...rooms, newRoom]));
+    }
   };
 
-  const occupyRoomWithTimer = (roomName: string, durationMs: number) => {
-    setRooms(prev => prev.map(r => 
-      r.name === roomName 
-        ? { ...r, status: 'Occupied' as const, occupiedAt: Date.now(), durationMs } 
-        : r
-    ));
+  const updateRoom = (roomId: string, updates: Partial<RoomData>) => {
+    if (isConfigured) {
+      try {
+        const updateObj = { [`/${roomId}`]: updates };
+        update(roomsRef, updateObj);
+      } catch (error) {
+        console.warn('Firebase updateRoom failed:', error);
+        setRooms(prev => prev.map(r => (r.id === roomId || r.name === roomId ? { ...r, ...updates } : r)));
+        localStorage.setItem('saga-rooms', JSON.stringify(rooms));
+      }
+    } else {
+      setRooms(prev => prev.map(r => (r.id === roomId || r.name === roomId ? { ...r, ...updates } : r)));
+      localStorage.setItem('saga-rooms', JSON.stringify(rooms));
+    }
   };
 
-  const availableRooms = (type: Room['type']) => {
+  const deleteRoom = (roomId: string) => {
+    if (isConfigured) {
+      try {
+        const updateObj = { [`/${roomId}`]: null };
+        update(roomsRef, updateObj);
+      } catch (error) {
+        console.warn('Firebase deleteRoom failed:', error);
+        setRooms(prev => prev.filter(r => r.id !== roomId && r.name !== roomId));
+        localStorage.setItem('saga-rooms', JSON.stringify(rooms.filter(r => r.id !== roomId && r.name !== roomId)));
+      }
+    } else {
+      setRooms(prev => prev.filter(r => r.id !== roomId && r.name !== roomId));
+      localStorage.setItem('saga-rooms', JSON.stringify(rooms.filter(r => r.id !== roomId && r.name !== roomId)));
+    }
+  };
+
+  const occupyRoomWithTimer = (roomId: string, durationMs: number) => {
+    updateRoom(roomId, { 
+      status: 'Occupied' as const, 
+      occupiedAt: Date.now(), 
+      durationMs 
+    });
+  };
+
+  const vacateRoom = (roomId: string) => {
+    updateRoom(roomId, { 
+      status: 'Available' as const, 
+      occupiedAt: undefined, 
+      durationMs: undefined 
+    });
+  };
+
+  const availableRooms = (type: RoomData['type']) => {
     return rooms.filter(r => r.type === type && r.status === 'Available');
   };
 
-  const vacateRoom = (roomName: string) => {
-    setRooms(prev => prev.map(r => 
-      r.name === roomName 
-        ? { ...r, status: 'Available' as const, occupiedAt: undefined, durationMs: undefined } 
-        : r
-    ));
+  return { 
+    rooms, 
+    tick, 
+    addRoom, 
+    updateRoom, 
+    deleteRoom, 
+    occupyRoomWithTimer, 
+    vacateRoom, 
+    availableRooms, 
+    isInitialized 
   };
-
-  return { rooms, tick, occupyRoom, occupyRoomWithTimer, vacateRoom, availableRooms };
 };
 

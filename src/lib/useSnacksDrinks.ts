@@ -1,14 +1,13 @@
-import { useEffect, useState } from 'react';
-export type { SnackDrink } from './snacksDrinks';
+import { useState, useEffect } from 'react';
 import type { SnackDrink } from './snacksDrinks';
+import { snacksDrinksRef, push, update, onValue, off, isConfigured } from './firebase';
 
 const STORAGE_KEY = 'saga-snacks-drinks';
 
 const readStoredItems = (): SnackDrink[] | null => {
   if (typeof window === 'undefined') return null;
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) return null;
-
   try {
     const parsed = JSON.parse(stored) as SnackDrink[];
     return Array.isArray(parsed) ? parsed : null;
@@ -18,72 +17,93 @@ const readStoredItems = (): SnackDrink[] | null => {
 };
 
 const persistItems = (items: SnackDrink[]) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  window.dispatchEvent(new Event('snacks-drinks-updated'));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 };
 
 export const useSnacksDrinks = () => {
   const [snacksDrinks, setSnacksDrinks] = useState<SnackDrink[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
 
+  // Load localStorage first
   useEffect(() => {
-    const storedItems = readStoredItems();
-    if (storedItems !== null) {
-      setSnacksDrinks(storedItems);
+    const stored = readStoredItems();
+    if (stored) setSnacksDrinks(stored);
+  }, []);
+
+  // Firebase listener (if configured)
+  useEffect(() => {
+    if (!isConfigured) {
+      setIsInitialized(true);
       return;
     }
 
-    import('./snacksDrinks').then(module => {
-      setSnacksDrinks(module.snacksDrinks);
-      persistItems(module.snacksDrinks);
-    });
-  }, []);
+    let unsubscribe: (() => void) | null = null;
 
-  useEffect(() => {
-    const syncItems = () => {
-      const stored = readStoredItems();
-      if (stored !== null) {
-        setSnacksDrinks(stored);
+    const setupListener = () => {
+      try {
+        unsubscribe = onValue(snacksDrinksRef, (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            const items = Object.entries(data).map(([id, value]: [string, any]) => ({ id, ...value }));
+            setSnacksDrinks(items);
+            persistItems(items);
+          } else {
+            setSnacksDrinks([]);
+            persistItems([]);
+          }
+          setIsInitialized(true);
+        });
+      } catch (error) {
+        console.warn('Firebase snacks listener failed:', error);
+        setIsInitialized(true);
       }
     };
 
-    window.addEventListener('storage', syncItems);
-    window.addEventListener('snacks-drinks-updated', syncItems);
+    setupListener();
 
     return () => {
-      window.removeEventListener('storage', syncItems);
-      window.removeEventListener('snacks-drinks-updated', syncItems);
+      if (unsubscribe) off(snacksDrinksRef, 'value', unsubscribe);
     };
   }, []);
 
-  const updateStoredItems = (updater: (prev: SnackDrink[]) => SnackDrink[]) => {
-    setSnacksDrinks((prev) => {
-      const nextItems = updater(prev);
-      persistItems(nextItems);
-      return nextItems;
-    });
+  const updateItems = (updater: (prev: SnackDrink[]) => SnackDrink[]) => {
+    const updated = updater(snacksDrinks);
+    setSnacksDrinks(updated);
+    persistItems(updated);
+
+    if (isConfigured) {
+      try {
+        const updates: Record<string, any> = {};
+        updated.forEach(item => {
+          updates[item.id] = item;
+        });
+        update(snacksDrinksRef, updates);
+      } catch (error) {
+        console.warn('Firebase update failed:', error);
+      }
+    }
   };
 
   const toggleAvailability = (id: string) => {
-    updateStoredItems((prev) => prev.map(item =>
+    updateItems(prev => prev.map(item => 
       item.id === id ? { ...item, available: !item.available } : item
     ));
   };
 
-  const addSnackDrink = (item: Omit<SnackDrink, 'id'> & { id?: string }) => {
-    const newId = item.id || `item-${Date.now()}`;
-    const newItem: SnackDrink = { ...item, id: newId, available: true };
-    updateStoredItems((prev) => [...prev, newItem]);
+  const addSnackDrink = (item: Omit<SnackDrink, 'id'>) => {
+    const newId = `item-${Date.now()}`;
+    const newItem = { ...item, id: newId, available: true };
+    updateItems(prev => [...prev, newItem]);
   };
 
   const updateSnackDrink = (id: string, updates: Partial<SnackDrink>) => {
-    updateStoredItems((prev) => prev.map(item =>
+    updateItems(prev => prev.map(item => 
       item.id === id ? { ...item, ...updates } : item
     ));
   };
 
   const deleteSnackDrink = (id: string) => {
-    updateStoredItems((prev) => prev.filter(item => item.id !== id));
+    updateItems(prev => prev.filter(item => item.id !== id));
   };
 
   const availableItems = () => snacksDrinks.filter(item => item.available);
@@ -95,6 +115,7 @@ export const useSnacksDrinks = () => {
     addSnackDrink,
     updateSnackDrink,
     deleteSnackDrink,
+    isInitialized,
   };
 };
 
